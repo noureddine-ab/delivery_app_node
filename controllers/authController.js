@@ -89,6 +89,8 @@ const authController = {
                     id: user.id,
                     name: user.name,
                     email: user.email,
+                    phone: user.phone,
+                    location: user.location,
                     role: user.role,
                 },
             });
