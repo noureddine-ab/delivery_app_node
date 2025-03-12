@@ -99,6 +99,42 @@ const authController = {
             res.status(500).json({ error: 'Internal server error' });
         }
     },
+
+    resetPassword: async (req, res) => {
+        try {
+            const { email, newPassword } = req.body;
+
+            // Validate input
+            if (!email || !newPassword) {
+                return res.status(400).json({ error: 'Email and new password are required' });
+            }
+
+            // Check if user exists
+            const [users] = await pool.query(
+                'SELECT * FROM users WHERE email = ?',
+                [email]
+            );
+
+            if (users.length === 0) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            // Hash the new password
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+            // Update the user's password
+            await pool.query(
+                'UPDATE users SET password_hash = ? WHERE email = ?',
+                [hashedPassword, email]
+            );
+
+            res.json({ message: 'Password reset successful' });
+        } catch (error) {
+            console.error('Reset password error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
 };
 
 module.exports = authController;
