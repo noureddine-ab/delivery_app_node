@@ -4,13 +4,12 @@ const validator = require('validator');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
-// Configure Mailtrap transporter
+// Configure Gmail transporter
 const transporter = nodemailer.createTransport({
-    host: process.env.MAILTRAP_HOST,
-    port: process.env.MAILTRAP_PORT,
+    service: 'gmail',
     auth: {
-        user: process.env.MAILTRAP_USER,
-        pass: process.env.MAILTRAP_PASS,
+        user: process.env.GMAIL_EMAIL, // Your Gmail address
+        pass: process.env.GMAIL_PASSWORD, // Your Gmail password or app password
     },
 });
 
@@ -35,8 +34,8 @@ const authController = {
             // Check if email exists in either unverified_users or users table
             const [existingUser] = await pool.query(
                 `SELECT email FROM unverified_users WHERE email = ?
-             UNION
-             SELECT email FROM users WHERE email = ?`,
+                 UNION
+                 SELECT email FROM users WHERE email = ?`,
                 [email, email]
             );
 
@@ -54,24 +53,22 @@ const authController = {
             // Insert new user into unverified_users table
             const [result] = await pool.query(
                 `INSERT INTO unverified_users 
-             (name, email, password_hash, phone, location, role, verification_token, verification_token_expiry) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
+                 (name, email, password_hash, phone, location, role, verification_token, verification_token_expiry) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
                 [name, email, hashedPassword, phone, location, role, verificationToken]
             );
 
             // Send verification email
             const verificationLink = `http://192.168.1.4:3000/api/auth/verify-email?token=${verificationToken}`;
             await transporter.sendMail({
-                from: 'noreply@demomailtrap.co',
-                to: email,
+                from: process.env.GMAIL_EMAIL, // Sender email
+                to: email, // Recipient email
                 subject: 'Verify Your Email',
                 html: `Click <a href="${verificationLink}">here</a> to verify your email.`,
             });
 
-            // Return the verification token in the response
             res.status(201).json({
                 message: 'Registration successful. Please check your email to verify your account.',
-                verificationToken: verificationToken, // Add this line
             });
         } catch (error) {
             console.error('Signup error:', error);
@@ -98,8 +95,8 @@ const authController = {
             // Move user from unverified_users to users table
             await pool.query(
                 `INSERT INTO users 
-             (name, email, password_hash, phone, location, role, is_verified) 
-             VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+                 (name, email, password_hash, phone, location, role, is_verified) 
+                 VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
                 [unverifiedUser.name, unverifiedUser.email, unverifiedUser.password_hash, unverifiedUser.phone, unverifiedUser.location, unverifiedUser.role]
             );
 
