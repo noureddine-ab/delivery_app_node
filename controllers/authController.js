@@ -3,6 +3,7 @@ const pool = require('../database');
 const validator = require('validator');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const moment = require('moment-timezone');
 
 // Configure Gmail transporter
 const transporter = nodemailer.createTransport({
@@ -217,6 +218,107 @@ const authController = {
             res.json({ message: 'Password reset successful' });
         } catch (error) {
             console.error('Reset password error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    forgotPassword: async (req, res) => {
+        try {
+            const { email } = req.body;
+
+            // Validate input
+            if (!email) {
+                return res.status(400).json({ error: 'Email is required' });
+            }
+
+            if (!validator.isEmail(email)) {
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+
+            // Check if the user exists
+            const [users] = await pool.query(
+                'SELECT * FROM users WHERE email = ?',
+                [email]
+            );
+
+            if (users.length === 0) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            const user = users[0];
+
+            // Generate OTP
+            const otp = crypto.randomInt(100000, 999999).toString(); // 6-digit OTP
+            const otpExpiry = new Date(Date.now() + 10 * 60 * 1000 + 60*60*1000); // OTP expires in 10 minutes
+            console.log(otpExpiry)
+
+            // Format the datetime for MySQL
+            const formattedOtpExpiry = otpExpiry.toISOString().slice(0, 19).replace('T', ' ');
+
+            // Store OTP and expiry in the database
+            await pool.query(
+                'UPDATE users SET reset_password_otp = ?, reset_password_otp_expiry = ? WHERE id = ?',
+                [otp, formattedOtpExpiry, user.id]
+            );
+
+            // Send OTP to the user's email
+            await transporter.sendMail({
+                from: process.env.GMAIL_EMAIL,
+                to: email,
+                subject: 'Password Reset OTP',
+                html: `Your OTP for password reset is: <strong>${otp}</strong>. This OTP is valid for 10 minutes.`,
+            });
+
+            res.json({ message: 'OTP sent to your email. Please check your inbox.' });
+        } catch (error) {
+            console.error('Forgot password error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    confirmPassword: async (req, res) => {
+        try {
+            const { email, otp, newPassword } = req.body;
+
+            // Validate input
+            if (!email || !otp || !newPassword) {
+                return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+            }
+
+            if (!validator.isEmail(email)) {
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+
+            // Check if the user exists
+            const [users] = await pool.query(
+                'SELECT * FROM users WHERE email = ?',
+                [email]
+            );
+
+            if (users.length === 0) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            const user = users[0];
+
+            // Check if OTP matches and is not expired
+            if (user.reset_password_otp !== otp || new Date(user.reset_password_otp_expiry) < new Date()) {
+                return res.status(400).json({ error: 'Invalid or expired OTP' });
+            }
+
+            // Hash the new password
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+            // Update the user's password and clear OTP fields
+            await pool.query(
+                'UPDATE users SET password_hash = ?, reset_password_otp = NULL, reset_password_otp_expiry = NULL WHERE id = ?',
+                [hashedPassword, user.id]
+            );
+
+            res.json({ message: 'Password reset successful. You can now log in with your new password.' });
+        } catch (error) {
+            console.error('Confirm password error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     },

@@ -18,4 +18,7 @@ router.get('/verify-email', authController.verifyEmail);
 // Check Verification Status Route
 router.get('/check-verification-status', authController.checkVerificationStatus);
 
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/confirm-password', authController.confirmPassword);
+
 module.exports = router;
