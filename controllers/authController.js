@@ -17,19 +17,15 @@ const transporter = nodemailer.createTransport({
 const authController = {
     signup: async (req, res) => {
         try {
-            const { name, email, password, phone, location, role } = req.body;
+            const { name, email, password, phone, location } = req.body;
 
             // Validate input
-            if (!name || !email || !password || !phone || !location || !role) {
+            if (!name || !email || !password || !phone || !location ) {
                 return res.status(400).json({ error: 'All fields are required' });
             }
 
             if (!validator.isEmail(email)) {
                 return res.status(400).json({ error: 'Invalid email format' });
-            }
-
-            if (!['Client', 'Delivery Man'].includes(role)) {
-                return res.status(400).json({ error: 'Invalid role specified' });
             }
 
             // Check if email exists in either unverified_users or users table
@@ -54,9 +50,9 @@ const authController = {
             // Insert new user into unverified_users table
             const [result] = await pool.query(
                 `INSERT INTO unverified_users 
-                 (name, email, password_hash, phone, location, role, verification_token, verification_token_expiry) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
-                [name, email, hashedPassword, phone, location, role, verificationToken]
+                 (name, email, password_hash, phone, location,  verification_token, verification_token_expiry) 
+                 VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
+                [name, email, hashedPassword, phone, location, verificationToken]
             );
 
             // Send verification email
@@ -96,8 +92,8 @@ const authController = {
             // Move user from unverified_users to users table
             await pool.query(
                 `INSERT INTO users 
-                 (name, email, password_hash, phone, location, role, is_verified) 
-                 VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+                 (name, email, password_hash, phone, location, is_verified) 
+                 VALUES (?, ?, ?, ?, ?, TRUE)`,
                 [unverifiedUser.name, unverifiedUser.email, unverifiedUser.password_hash, unverifiedUser.phone, unverifiedUser.location, unverifiedUser.role]
             );
 
