@@ -68,8 +68,41 @@ const cancelDelivery = async (req, res) => {
     }
 };
 
+// Get nearest available drivers
+const getNearestDrivers = async (req, res) => {
+    try {
+        const { latitude, longitude } = req.query;
+        const radius = 10; // 10km radius around Tunis
+
+        const [drivers] = await pool.query(`
+      SELECT 
+        id, 
+        name, 
+        phone, 
+        vehicle_type,
+        rating,
+        (6371 * ACOS(
+          COS(RADIANS(?)) * COS(RADIANS(latitude)) * 
+          COS(RADIANS(longitude) - RADIANS(?)) + 
+          SIN(RADIANS(?)) * SIN(RADIANS(latitude))
+        )) AS distance_km
+      FROM drivers
+      WHERE is_available = TRUE
+      HAVING distance_km < ?
+      ORDER BY distance_km
+      LIMIT 20
+    `, [latitude, longitude, latitude, radius]);
+
+        res.status(200).json(drivers);
+    } catch (error) {
+        console.error('Error fetching drivers:', error);
+        res.status(500).json({ error: 'Failed to fetch drivers' });
+    }
+};
+
 module.exports = {
     upload,
     estimatePrice,
     cancelDelivery,
+    getNearestDrivers,
 };

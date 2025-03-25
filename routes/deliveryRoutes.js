@@ -4,13 +4,15 @@ const router = express.Router();
 const {
     upload,
     estimatePrice,
-    cancelDelivery // Add this line
-} = require('../controllers/deliveryController'); // Correct import
+    cancelDelivery,
+    getNearestDrivers
+} = require('../controllers/deliveryController');
 
-// Existing route
+
 router.post('/estimate-price', upload.single('image'), estimatePrice);
 
-// New route for cancellation
-router.post('/cancel-delivery', cancelDelivery); // ✅ Fixed
+router.post('/cancel-delivery', cancelDelivery);
+
+router.get('/nearest-drivers', getNearestDrivers);
 
 module.exports = router;
