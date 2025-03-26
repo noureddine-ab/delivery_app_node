@@ -100,9 +100,109 @@ const getNearestDrivers = async (req, res) => {
     }
 };
 
+const trackDelivery = async (req, res) => {
+    try {
+        const { deliveryId } = req.params;
+
+        const [delivery] = await pool.query(`
+      SELECT 
+        id,
+        object_type,
+        source,
+        destination,
+        status,
+        status_history,
+        shipping_date,
+        updated_at
+      FROM deliveries 
+      WHERE id = ?
+    `, [deliveryId]);
+
+        if (delivery.length === 0) {
+            return res.status(404).json({ error: 'Delivery not found' });
+        }
+
+        // Parse the status history or create empty array
+        const statusHistory = delivery[0].status_history
+            ? JSON.parse(delivery[0].status_history)
+            : [
+                {
+                    status: 'pending',
+                    timestamp: delivery[0].shipping_date.toISOString()
+                }
+            ];
+
+        res.json({
+            deliveryId: delivery[0].id,
+            objectType: delivery[0].object_type,
+            source: delivery[0].source,
+            destination: delivery[0].destination,
+            currentStatus: delivery[0].status,
+            statusHistory: statusHistory,
+            lastUpdated: delivery[0].updated_at
+        });
+
+    } catch (error) {
+        console.error('Error tracking delivery:', error);
+        res.status(500).json({ error: 'Failed to track delivery' });
+    }
+};
+
+const updateDeliveryStatus = async (req, res) => {
+    try {
+        const { deliveryId } = req.params;
+        const { newStatus } = req.body;
+
+        // Get current delivery data
+        const [delivery] = await pool.query('SELECT * FROM deliveries WHERE id = ?', [deliveryId]);
+
+        if (delivery.length === 0) {
+            return res.status(404).json({ error: 'Delivery not found' });
+        }
+
+        // Parse existing status history or initialize
+        const currentHistory = delivery[0].status_history
+            ? JSON.parse(delivery[0].status_history)
+            : [
+                {
+                    status: 'pending',
+                    timestamp: delivery[0].shipping_date.toISOString()
+                }
+            ];
+
+        // Add new status change
+        currentHistory.push({
+            status: newStatus,
+            timestamp: new Date().toISOString()
+        });
+
+        // Update the delivery
+        await pool.query(`
+      UPDATE deliveries 
+      SET 
+        status = ?,
+        status_history = ?,
+        updated_at = NOW()
+      WHERE id = ?
+    `, [newStatus, JSON.stringify(currentHistory), deliveryId]);
+
+        res.json({
+            success: true,
+            newStatus,
+            updatedAt: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('Error updating delivery status:', error);
+        res.status(500).json({ error: 'Failed to update delivery status' });
+    }
+};
+
 module.exports = {
     upload,
     estimatePrice,
     cancelDelivery,
     getNearestDrivers,
+    trackDelivery,
+    updateDeliveryStatus,
 };
