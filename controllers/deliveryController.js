@@ -72,28 +72,44 @@ const cancelDelivery = async (req, res) => {
 const getNearestDrivers = async (req, res) => {
     try {
         const { latitude, longitude } = req.query;
-        const radius = 10; // 10km radius around Tunis
+
+        // Validate coordinates
+        if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+            return res.status(400).json({ error: 'Invalid coordinates' });
+        }
+
+        const radius = 10; // 10km radius
 
         const [drivers] = await pool.query(`
-      SELECT 
-        id, 
-        name, 
-        phone, 
-        vehicle_type,
-        rating,
-        (6371 * ACOS(
-          COS(RADIANS(?)) * COS(RADIANS(latitude)) * 
-          COS(RADIANS(longitude) - RADIANS(?)) + 
-          SIN(RADIANS(?)) * SIN(RADIANS(latitude))
-        )) AS distance_km
-      FROM drivers
-      WHERE is_available = TRUE
-      HAVING distance_km < ?
-      ORDER BY distance_km
-      LIMIT 20
-    `, [latitude, longitude, latitude, radius]);
+            SELECT 
+                id, 
+                name, 
+                phone, 
+                vehicle_type,
+                rating,
+                latitude,
+                longitude,
+                (6371 * ACOS(
+                    COS(RADIANS(?)) * COS(RADIANS(latitude)) * 
+                    COS(RADIANS(longitude) - RADIANS(?)) + 
+                    SIN(RADIANS(?)) * SIN(RADIANS(latitude))
+                )) AS distance_km
+            FROM drivers
+            WHERE is_available = TRUE
+            HAVING distance_km < ?
+            ORDER BY distance_km
+            LIMIT 20
+        `, [latitude, longitude, latitude, radius]);
 
-        res.status(200).json(drivers);
+        // Ensure numeric values are properly formatted
+        const formattedDrivers = drivers.map(driver => ({
+            ...driver,
+            latitude: parseFloat(driver.latitude),
+            longitude: parseFloat(driver.longitude),
+            distance_km: parseFloat(driver.distance_km)
+        }));
+
+        res.status(200).json(formattedDrivers);
     } catch (error) {
         console.error('Error fetching drivers:', error);
         res.status(500).json({ error: 'Failed to fetch drivers' });
