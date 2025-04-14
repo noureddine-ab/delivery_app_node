@@ -159,7 +159,7 @@ const trackDelivery = async (req, res) => {
                 co.id AS order_id,
                 co.status AS order_status,
                 co.total,
-                d.id AS delivery_id,
+                d.order_id AS delivery_id,
                 d.status AS delivery_status,
                 d.shipping_date,
                 d.updated_at,
@@ -229,6 +229,92 @@ const updateDeliveryStatus = async (req, res) => {
     }
 };
 
+const searchDrivers = async (req, res) => {
+    try {
+        const { source, destination, vehicleType } = req.query;
+
+        // Simple validation
+        if (!source) {
+            return res.status(400).json({ error: 'Source location is required' });
+        }
+
+        // Corrected query matching your database schema
+        const [drivers] = await pool.query(`
+            SELECT 
+                u.id, 
+                u.name, 
+                u.phone,
+                d.vehicle_type,
+                d.rating,
+                d.service_area
+            FROM drivers d
+            JOIN users u ON d.user_id = u.id
+            WHERE d.is_available = TRUE
+            AND d.service_area LIKE ?
+            ${vehicleType && vehicleType !== 'all' ? 'AND d.vehicle_type = ?' : ''}
+            ORDER BY d.rating DESC
+            LIMIT 20
+        `, [
+            `%${source}%`,
+            ...(vehicleType && vehicleType !== 'all' ? [vehicleType] : [])
+        ]);
+
+        // Format response to match Flutter expectations
+        const formattedDrivers = drivers.map(driver => ({
+            id: driver.id,
+            name: driver.name,
+            phone: driver.phone,
+            vehicleType: driver.vehicle_type,
+            rating: driver.rating,
+            serviceArea: driver.service_area,
+            canDeliverToDestination: destination
+                ? driver.service_area.toLowerCase().includes(destination.toLowerCase())
+                : true
+        }));
+
+        res.status(200).json(formattedDrivers);
+    } catch (error) {
+        console.error('Error searching drivers:', error);
+        res.status(500).json({
+            error: 'Failed to search drivers',
+            details: process.env.NODE_ENV === 'development' ? error.message : null
+        });
+    }
+};
+
+const getAllDrivers = async (req, res) => {
+    try {
+        const [drivers] = await pool.query(`
+            SELECT 
+                u.id, 
+                u.name, 
+                u.phone,
+                d.vehicle_type,
+                d.rating,
+                d.service_area
+            FROM drivers d
+            JOIN users u ON d.user_id = u.id
+            WHERE d.is_available = TRUE
+            ORDER BY d.rating DESC
+            LIMIT 50
+        `);
+
+        const formattedDrivers = drivers.map(driver => ({
+            id: driver.id,
+            name: driver.name,
+            phone: driver.phone,
+            vehicleType: driver.vehicle_type,
+            rating: driver.rating,
+            serviceArea: driver.service_area
+        }));
+
+        res.status(200).json(formattedDrivers);
+    } catch (error) {
+        console.error('Error fetching all drivers:', error);
+        res.status(500).json({ error: 'Failed to fetch drivers' });
+    }
+};
+
 module.exports = {
     upload,
     estimatePrice,
@@ -236,4 +322,6 @@ module.exports = {
     getNearestDrivers,
     trackDelivery,
     updateDeliveryStatus,
+    searchDrivers,
+    getAllDrivers,
 };

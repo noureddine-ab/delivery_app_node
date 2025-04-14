@@ -8,6 +8,8 @@ const {
     getNearestDrivers,
     trackDelivery,
     updateDeliveryStatus,
+    searchDrivers,
+    getAllDrivers,
 } = require('../controllers/deliveryController');
 
 
@@ -20,5 +22,9 @@ router.get('/nearest-drivers', getNearestDrivers);
 router.get('/:deliveryId', trackDelivery);
 
 router.post('/:deliveryId/update-status', updateDeliveryStatus);
+
+router.get('/drivers/search', searchDrivers);
+
+router.get('/drivers/all', getAllDrivers);
 
 module.exports = router;
