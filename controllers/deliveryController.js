@@ -23,48 +23,82 @@ const upload = multer({ storage });
 
 const estimatePrice = async (req, res) => {
     try {
-        const { objectType, source, destination, shippingDate } = req.body;
+        const { objectType, source, destination, shippingDate, customerId } = req.body;
         const imagePath = req.file ? path.join('uploads', req.file.filename) : null;
 
-        // Save to MySQL (removed estimated_price)
-        const query = `
-            INSERT INTO deliveries (object_type, source, destination, shipping_date, image_path)
-            VALUES (?, ?, ?, ?, ?)
-        `;
-        const [queryResult] = await pool.query(query, [
-            objectType,
-            source,
-            destination,
-            shippingDate,
-            imagePath
-        ]);
+        // Start transaction
+        await pool.query('START TRANSACTION');
 
-        res.status(200).json({
-            message: 'Delivery created successfully',
-            deliveryId: queryResult.insertId
-        });
+        try {
+            // 1. Create the order
+            const [orderResult] = await pool.query(`
+                INSERT INTO customerorder (date, status, total, customer_id, payment_method)
+                VALUES (NOW(), 'pending', 0, ?, NULL)
+            `, [customerId]);
+
+            const orderId = orderResult.insertId;
+
+            // 2. Add product to the order
+            const [productResult] = await pool.query(`
+                INSERT INTO product (object_type, price, description, customer_order_id, image_path)
+                VALUES (?, 0, NULL, ?, ?)
+            `, [objectType, orderId, imagePath]);
+
+            // 3. Create delivery record
+            const [deliveryResult] = await pool.query(`
+                INSERT INTO delivery (order_id, longitude, latitude, shipping_date, status, driver_id)
+                VALUES (?, 0, 0, ?, 'pending', 0)
+            `, [orderId, shippingDate]);
+
+            await pool.query('COMMIT');
+
+            res.status(200).json({
+                message: 'Order and delivery created successfully',
+                orderId: orderId,
+                deliveryId: deliveryResult.insertId
+            });
+        } catch (error) {
+            await pool.query('ROLLBACK');
+            throw error;
+        }
     } catch (error) {
-        console.error('Error creating delivery:', error);
-        res.status(500).json({ error: 'Failed to create delivery' });
+        console.error('Error creating order:', error);
+        res.status(500).json({ error: 'Failed to create order' });
     }
 };
 
 const cancelDelivery = async (req, res) => {
     try {
-        const { deliveryId } = req.body;
+        const { orderId } = req.body;
 
-        if (!deliveryId || isNaN(deliveryId)) {
-            return res.status(400).json({ error: 'Invalid delivery ID' });
+        if (!orderId || isNaN(orderId)) {
+            return res.status(400).json({ error: 'Invalid order ID' });
         }
-        const parsedId = parseInt(deliveryId, 10);
 
-        const query = 'UPDATE deliveries SET status = ? WHERE id = ?';
-        await pool.query(query, ['cancelled', parsedId]);
+        // Update both order and delivery status
+        await pool.query('START TRANSACTION');
+        try {
+            await pool.query(`
+                UPDATE customerorder 
+                SET status = 'cancelled' 
+                WHERE id = ?
+            `, [orderId]);
 
-        res.status(200).json({ message: 'Delivery cancelled successfully' });
+            await pool.query(`
+                UPDATE delivery 
+                SET status = 'failed' 
+                WHERE order_id = ?
+            `, [orderId]);
+
+            await pool.query('COMMIT');
+            res.status(200).json({ message: 'Order and delivery cancelled successfully' });
+        } catch (error) {
+            await pool.query('ROLLBACK');
+            throw error;
+        }
     } catch (error) {
-        console.error('Error cancelling delivery:', error);
-        res.status(500).json({ error: 'Failed to cancel delivery' });
+        console.error('Error cancelling order:', error);
+        res.status(500).json({ error: 'Failed to cancel order' });
     }
 };
 
@@ -118,89 +152,70 @@ const getNearestDrivers = async (req, res) => {
 
 const trackDelivery = async (req, res) => {
     try {
-        const { deliveryId } = req.params;
+        const { orderId } = req.params;
 
-        const [delivery] = await pool.query(`
-      SELECT 
-        id,
-        object_type,
-        source,
-        destination,
-        status,
-        status_history,
-        shipping_date,
-        updated_at
-      FROM deliveries 
-      WHERE id = ?
-    `, [deliveryId]);
+        const [results] = await pool.query(`
+            SELECT 
+                co.id AS order_id,
+                co.status AS order_status,
+                co.total,
+                d.id AS delivery_id,
+                d.status AS delivery_status,
+                d.shipping_date,
+                d.updated_at,
+                p.object_type,
+                p.image_path
+            FROM customerorder co
+            JOIN delivery d ON co.id = d.order_id
+            JOIN product p ON co.id = p.customer_order_id
+            WHERE co.id = ?
+        `, [orderId]);
 
-        if (delivery.length === 0) {
-            return res.status(404).json({ error: 'Delivery not found' });
+        if (results.length === 0) {
+            return res.status(404).json({ error: 'Order not found' });
         }
 
-        // Parse the status history or create empty array
-        const statusHistory = delivery[0].status_history
-            ? JSON.parse(delivery[0].status_history)
-            : [
-                {
-                    status: 'pending',
-                    timestamp: delivery[0].shipping_date.toISOString()
-                }
-            ];
+        const order = results[0];
 
         res.json({
-            deliveryId: delivery[0].id,
-            objectType: delivery[0].object_type,
-            source: delivery[0].source,
-            destination: delivery[0].destination,
-            currentStatus: delivery[0].status,
-            statusHistory: statusHistory,
-            lastUpdated: delivery[0].updated_at
+            orderId: order.order_id,
+            orderStatus: order.order_status,
+            deliveryId: order.delivery_id,
+            deliveryStatus: order.delivery_status,
+            objectType: order.object_type,
+            imagePath: order.image_path,
+            shippingDate: order.shipping_date,
+            lastUpdated: order.updated_at
         });
 
     } catch (error) {
-        console.error('Error tracking delivery:', error);
-        res.status(500).json({ error: 'Failed to track delivery' });
+        console.error('Error tracking order:', error);
+        res.status(500).json({ error: 'Failed to track order' });
     }
 };
 
 const updateDeliveryStatus = async (req, res) => {
     try {
-        const { deliveryId } = req.params;
+        const { orderId } = req.params;
         const { newStatus } = req.body;
 
-        // Get current delivery data
-        const [delivery] = await pool.query('SELECT * FROM deliveries WHERE id = ?', [deliveryId]);
-
-        if (delivery.length === 0) {
-            return res.status(404).json({ error: 'Delivery not found' });
-        }
-
-        // Parse existing status history or initialize
-        const currentHistory = delivery[0].status_history
-            ? JSON.parse(delivery[0].status_history)
-            : [
-                {
-                    status: 'pending',
-                    timestamp: delivery[0].shipping_date.toISOString()
-                }
-            ];
-
-        // Add new status change
-        currentHistory.push({
-            status: newStatus,
-            timestamp: new Date().toISOString()
-        });
-
-        // Update the delivery
+        // Update delivery status
         await pool.query(`
-      UPDATE deliveries 
-      SET 
-        status = ?,
-        status_history = ?,
-        updated_at = NOW()
-      WHERE id = ?
-    `, [newStatus, JSON.stringify(currentHistory), deliveryId]);
+            UPDATE delivery 
+            SET 
+                status = ?,
+                updated_at = NOW()
+            WHERE order_id = ?
+        `, [newStatus, orderId]);
+
+        // If delivered, also update order status
+        if (newStatus === 'delivered') {
+            await pool.query(`
+                UPDATE customerorder 
+                SET status = 'delivered'
+                WHERE id = ?
+            `, [orderId]);
+        }
 
         res.json({
             success: true,
