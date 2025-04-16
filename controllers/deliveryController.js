@@ -21,49 +21,83 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-const estimatePrice = async (req, res) => {
+const order = async (req, res) => {
     try {
-        const { objectType, source, destination, shippingDate, customerId } = req.body;
+        // Validate required fields
+        const requiredFields = ['customerId', 'objectType', 'source', 'destination', 'shippingDate'];
+        const missingFields = requiredFields.filter(field => !req.body[field]);
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                error: 'Missing required fields',
+                missingFields
+            });
+        }
+
+        const { customerId, objectType, source, destination, shippingDate } = req.body;
         const imagePath = req.file ? path.join('uploads', req.file.filename) : null;
 
-        // Start transaction
+        // Validate customerId exists in database
+        const [userCheck] = await pool.query('SELECT id FROM users WHERE id = ?', [customerId]);
+        if (userCheck.length === 0) {
+            return res.status(404).json({ error: 'Customer not found' });
+        }
+
+        // Validate shipping date
+        const shippingDateObj = new Date(shippingDate);
+        if (isNaN(shippingDateObj.getTime())) {
+            return res.status(400).json({ error: 'Invalid shipping date' });
+        }
+
         await pool.query('START TRANSACTION');
 
         try {
-            // 1. Create the order
-            const [orderResult] = await pool.query(`
-                INSERT INTO customerorder (date, status, total, customer_id, payment_method)
-                VALUES (NOW(), 'pending', 0, ?, NULL)
-            `, [customerId]);
+            // Create order
+            const [orderResult] = await pool.query(
+                `INSERT INTO customerorder 
+                (date, status, total, customer_id, payment_method, source, destination)
+                VALUES (NOW(), 'pending', 0, ?, NULL, ?, ?)`,
+                [customerId, source, destination]
+            );
 
             const orderId = orderResult.insertId;
 
-            // 2. Add product to the order
-            const [productResult] = await pool.query(`
-                INSERT INTO product (object_type, price, description, customer_order_id, image_path)
-                VALUES (?, 0, NULL, ?, ?)
-            `, [objectType, orderId, imagePath]);
+            // Add product
+            await pool.query(
+                `INSERT INTO product 
+                (object_type, price, description, customer_order_id, image_path)
+                VALUES (?, 0, ?, ?, ?)`,
+                [objectType, 'Delivery item', orderId, imagePath]
+            );
 
-            // 3. Create delivery record
-            const [deliveryResult] = await pool.query(`
-                INSERT INTO delivery (order_id, longitude, latitude, shipping_date, status, driver_id)
-                VALUES (?, 0, 0, ?, 'pending', 0)
-            `, [orderId, shippingDate]);
+            // Create delivery
+            const [deliveryResult] = await pool.query(
+                `INSERT INTO delivery 
+                (order_id, shipping_date, status)
+                VALUES (?, ?, 'pending')`,
+                [orderId, shippingDate]
+            );
 
             await pool.query('COMMIT');
 
-            res.status(200).json({
-                message: 'Order and delivery created successfully',
-                orderId: orderId,
-                deliveryId: deliveryResult.insertId
+            res.status(201).json({
+                success: true,
+                orderId,
+                deliveryId: deliveryResult.insertId,
+                imagePath
             });
+
         } catch (error) {
             await pool.query('ROLLBACK');
-            throw error;
+            console.error('Transaction error:', error);
+            res.status(500).json({ error: 'Order processing failed' });
         }
     } catch (error) {
-        console.error('Error creating order:', error);
-        res.status(500).json({ error: 'Failed to create order' });
+        console.error('Order creation failed:', error);
+        res.status(500).json({
+            error: 'Order creation failed',
+            details: process.env.NODE_ENV === 'development' ? error.message : null
+        });
     }
 };
 
@@ -116,8 +150,8 @@ const getNearestDrivers = async (req, res) => {
 
         const [drivers] = await pool.query(`
             SELECT 
-                id, 
-                name, 
+                user_id, 
+                u.name, 
                 phone, 
                 vehicle_type,
                 rating,
@@ -128,8 +162,8 @@ const getNearestDrivers = async (req, res) => {
                     COS(RADIANS(longitude) - RADIANS(?)) + 
                     SIN(RADIANS(?)) * SIN(RADIANS(latitude))
                 )) AS distance_km
-            FROM drivers
-            WHERE is_available = TRUE
+            FROM drivers , users u
+            WHERE is_available = TRUE && u.id=drivers.user_id
             HAVING distance_km < ?
             ORDER BY distance_km
             LIMIT 20
@@ -317,7 +351,7 @@ const getAllDrivers = async (req, res) => {
 
 module.exports = {
     upload,
-    estimatePrice,
+    order,
     cancelDelivery,
     getNearestDrivers,
     trackDelivery,

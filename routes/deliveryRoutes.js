@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const {
     upload,
-    estimatePrice,
+    order,
     cancelDelivery,
     getNearestDrivers,
     trackDelivery,
@@ -13,7 +13,7 @@ const {
 } = require('../controllers/deliveryController');
 
 
-router.post('/estimate-price', upload.single('image'), estimatePrice);
+router.post('/order', upload.single('image'), order);
 
 router.post('/cancel-delivery', cancelDelivery);
 
