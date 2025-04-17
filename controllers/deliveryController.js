@@ -34,7 +34,7 @@ const order = async (req, res) => {
             });
         }
 
-        const { customerId, objectType, source, destination, shippingDate } = req.body;
+        const { customerId, objectType, source, destination, shippingDate, description } = req.body;
         const imagePath = req.file ? path.join('uploads', req.file.filename) : null;
 
         // Validate customerId exists in database
@@ -67,7 +67,7 @@ const order = async (req, res) => {
                 `INSERT INTO product 
                 (object_type, price, description, customer_order_id, image_path)
                 VALUES (?, 0, ?, ?, ?)`,
-                [objectType, 'Delivery item', orderId, imagePath]
+                [objectType, description, orderId, imagePath]
             );
 
             // Create delivery

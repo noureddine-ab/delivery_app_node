@@ -4,6 +4,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
 const userMangementRoutes = require('./routes/userManagementRoutes');
+const deliveryAgentRoutes = require('./routes/deliveryAgentRoutes');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/users', userMangementRoutes);
+app.use('/api/delivery-agent', deliveryAgentRoutes);
 
 // Health Check Endpoint
 app.get('/health', (req, res) => {
