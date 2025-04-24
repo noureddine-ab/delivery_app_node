@@ -10,6 +10,7 @@ const {
     updateDeliveryStatus,
     searchDrivers,
     getAllDrivers,
+    getUserOrders,
 } = require('../controllers/deliveryController');
 
 
@@ -26,5 +27,7 @@ router.post('/:deliveryId/update-status', updateDeliveryStatus);
 router.get('/drivers/search', searchDrivers);
 
 router.get('/drivers/all', getAllDrivers);
+
+router.get('/user-orders/:customerId', getUserOrders);
 
 module.exports = router;

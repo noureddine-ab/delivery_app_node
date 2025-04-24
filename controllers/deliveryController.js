@@ -349,6 +349,34 @@ const getAllDrivers = async (req, res) => {
     }
 };
 
+const getUserOrders = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+
+        const query = `
+  SELECT 
+    co.id AS order_id,
+    co.date,
+    co.source,
+    co.destination,
+    co.status AS order_status,
+    p.object_type,
+    dl.status AS delivery_status
+  FROM customerorder co
+  LEFT JOIN product p ON co.id = p.customer_order_id
+  LEFT JOIN delivery dl ON co.id = dl.order_id
+  WHERE co.customer_id = ?
+  ORDER BY co.date DESC
+`;
+        const [orders] = await pool.execute(query, [customerId]);
+        res.json(orders);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
 module.exports = {
     upload,
     order,
@@ -358,4 +386,5 @@ module.exports = {
     updateDeliveryStatus,
     searchDrivers,
     getAllDrivers,
+    getUserOrders,
 };
