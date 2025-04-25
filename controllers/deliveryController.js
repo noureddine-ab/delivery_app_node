@@ -361,7 +361,9 @@ const getUserOrders = async (req, res) => {
     co.destination,
     co.status AS order_status,
     p.object_type,
-    dl.status AS delivery_status
+    dl.status AS delivery_status,
+    p.description,
+    p.image_path
   FROM customerorder co
   LEFT JOIN product p ON co.id = p.customer_order_id
   LEFT JOIN delivery dl ON co.id = dl.order_id

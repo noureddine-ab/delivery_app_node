@@ -5,6 +5,7 @@ const authRoutes = require('./routes/authRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
 const userMangementRoutes = require('./routes/userManagementRoutes');
 const deliveryAgentRoutes = require('./routes/deliveryAgentRoutes');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/users', userMangementRoutes);
 app.use('/api/delivery-agent', deliveryAgentRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health Check Endpoint
 app.get('/health', (req, res) => {
