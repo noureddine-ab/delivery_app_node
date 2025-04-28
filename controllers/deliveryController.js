@@ -103,9 +103,9 @@ const order = async (req, res) => {
 
 const cancelDelivery = async (req, res) => {
     try {
-        const { orderId } = req.body;
+        const { deliveryId } = req.body;
 
-        if (!orderId || isNaN(orderId)) {
+        if (!deliveryId || isNaN(deliveryId)) {
             return res.status(400).json({ error: 'Invalid order ID' });
         }
 
@@ -116,13 +116,13 @@ const cancelDelivery = async (req, res) => {
                 UPDATE customerorder 
                 SET status = 'cancelled' 
                 WHERE id = ?
-            `, [orderId]);
+            `, [deliveryId]);
 
             await pool.query(`
                 UPDATE delivery 
                 SET status = 'failed' 
                 WHERE order_id = ?
-            `, [orderId]);
+            `, [deliveryId]);
 
             await pool.query('COMMIT');
             res.status(200).json({ message: 'Order and delivery cancelled successfully' });
