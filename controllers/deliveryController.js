@@ -112,11 +112,7 @@ const cancelDelivery = async (req, res) => {
         // Update both order and delivery status
         await pool.query('START TRANSACTION');
         try {
-            await pool.query(`
-                UPDATE customerorder 
-                SET status = 'cancelled' 
-                WHERE id = ?
-            `, [deliveryId]);
+            await pool.query('CALL UpdateDeliveryStatus(?, ?)', [deliveryId, 'cancelled']);
 
             await pool.query(`
                 UPDATE delivery 
@@ -186,45 +182,57 @@ const getNearestDrivers = async (req, res) => {
 
 const trackDelivery = async (req, res) => {
     try {
-        const { orderId } = req.params;
+        const { deliveryId } = req.params;
 
         const [results] = await pool.query(`
             SELECT 
-                co.id AS order_id,
-                co.status AS order_status,
-                co.total,
-                d.order_id AS delivery_id,
-                d.status AS delivery_status,
+                d.order_id,
+                d.status AS current_status,
                 d.shipping_date,
                 d.updated_at,
+                d.status_history,
                 p.object_type,
-                p.image_path
-            FROM customerorder co
-            JOIN delivery d ON co.id = d.order_id
-            JOIN product p ON co.id = p.customer_order_id
-            WHERE co.id = ?
-        `, [orderId]);
+                p.image_path,
+                co.source AS source,
+                co.destination AS destination
+            FROM delivery d
+            JOIN product p ON d.order_id = p.customer_order_id
+            JOIN customerorder co ON d.order_id = co.id
+            WHERE d.order_id = ?
+        `, [deliveryId]);
 
         if (results.length === 0) {
-            return res.status(404).json({ error: 'Order not found' });
+            return res.status(404).json({ error: 'Delivery not found' });
         }
 
-        const order = results[0];
+        const delivery = results[0];
+
+        // Parse status history
+        let statusHistory = [];
+        if (delivery.status_history) {
+            try {
+                statusHistory = JSON.parse(`[${delivery.status_history.slice(0, -1)}]`);
+            } catch (e) {
+                console.error('Error parsing status history:', e);
+                statusHistory = []; // Fallback to empty array
+            }
+        }
 
         res.json({
-            orderId: order.order_id,
-            orderStatus: order.order_status,
-            deliveryId: order.delivery_id,
-            deliveryStatus: order.delivery_status,
-            objectType: order.object_type,
-            imagePath: order.image_path,
-            shippingDate: order.shipping_date,
-            lastUpdated: order.updated_at
+            deliveryId: delivery.order_id,
+            currentStatus: delivery.current_status,
+            objectType: delivery.object_type,
+            imagePath: delivery.image_path,
+            source: delivery.source,
+            destination: delivery.destination,
+            shippingDate: delivery.shipping_date,
+            lastUpdated: delivery.updated_at,
+            statusHistory: statusHistory
         });
 
     } catch (error) {
-        console.error('Error tracking order:', error);
-        res.status(500).json({ error: 'Failed to track order' });
+        console.error('Error tracking delivery:', error);
+        res.status(500).json({ error: 'Failed to track delivery' });
     }
 };
 
