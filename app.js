@@ -5,6 +5,8 @@ const authRoutes = require('./routes/authRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
 const userMangementRoutes = require('./routes/userManagementRoutes');
 const deliveryAgentRoutes = require('./routes/deliveryAgentRoutes');
+const dashboardRoutes = require('./routes/dashboard');
+
 const path = require('path');
 
 const app = express();
@@ -19,6 +21,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/users', userMangementRoutes);
 app.use('/api/delivery-agent', deliveryAgentRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health Check Endpoint
