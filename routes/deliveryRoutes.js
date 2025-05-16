@@ -11,6 +11,7 @@ const {
     searchDrivers,
     getAllDrivers,
     getUserOrders,
+    getInTransitOrders,
 } = require('../controllers/deliveryController');
 
 
@@ -29,5 +30,7 @@ router.get('/drivers/search', searchDrivers);
 router.get('/drivers/all', getAllDrivers);
 
 router.get('/user-orders/:customerId', getUserOrders);
+
+router.get('/:customerId/in-transit', getInTransitOrders);
 
 module.exports = router;

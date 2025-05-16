@@ -387,6 +387,52 @@ const getUserOrders = async (req, res) => {
     }
 };
 
+const getInTransitOrders = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+
+        const query = `
+            SELECT 
+                co.id AS order_id,
+                co.date,
+                co.source,
+                co.destination,
+                co.total,
+                p.object_type,
+                p.description,
+                p.image_path,
+                d.status AS delivery_status
+            FROM customerorder co
+            JOIN product p ON co.id = p.customer_order_id
+            JOIN delivery d ON co.id = d.order_id
+            WHERE co.customer_id = ?
+            AND d.status = 'in_transit'
+            ORDER BY co.date DESC
+        `;
+
+        const [orders] = await pool.query(query, [customerId]);
+
+        res.status(200).json(orders.map(order => ({
+            id: order.order_id,
+            date: order.date,
+            source: order.source,
+            destination: order.destination,
+            total: order.total,
+            objectType: order.object_type,
+            description: order.description,
+            imagePath: order.image_path,
+            status: order.delivery_status
+        })));
+
+    } catch (error) {
+        console.error('Error fetching in-transit orders:', error);
+        res.status(500).json({
+            error: 'Failed to fetch in-transit orders',
+            details: process.env.NODE_ENV === 'development' ? error.message : null
+        });
+    }
+};
+
 module.exports = {
     upload,
     order,
@@ -397,4 +443,5 @@ module.exports = {
     searchDrivers,
     getAllDrivers,
     getUserOrders,
+    getInTransitOrders,
 };
