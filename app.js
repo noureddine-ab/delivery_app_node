@@ -22,15 +22,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Special handling for payment webhook (raw body)
-app.use('/api/payment/webhook',
-    bodyParser.raw({ type: 'application/json' }),
-    (req, res, next) => {
-        req.rawBody = req.body.toString('utf8');
-        next();
-    }
-);
-
 // Regular middleware for other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,7 +32,7 @@ app.use('/api/delivery', deliveryRoutes);
 app.use('/api/users', userMangementRoutes);
 app.use('/api/delivery-agent', deliveryAgentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/payment', paymentRoutes); // NEW: Payment routes
+app.use('/api/payment', paymentRoutes); 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Enhanced error handling middleware
